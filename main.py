@@ -19,6 +19,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title = "RFC Call Center API",
     description="""
+    description="""
        API pour la gestion du centre d'appel RFC.
     
        Cette API permet la gestion des commandes, des clients, des utilisateurs et des tablettes.    
