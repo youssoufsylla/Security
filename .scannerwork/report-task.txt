@@ -1,0 +1,6 @@
+projectKey=rfc_callcenter_api_main
+serverUrl=https://dbcb-197-149-244-202.ngrok-free.app
+serverVersion=25.5.0.107428
+dashboardUrl=https://dbcb-197-149-244-202.ngrok-free.app/dashboard?id=rfc_callcenter_api_main
+ceTaskId=21920b92-2c63-45af-b6b9-46fe73e8c838
+ceTaskUrl=https://dbcb-197-149-244-202.ngrok-free.app/api/ce/task?id=21920b92-2c63-45af-b6b9-46fe73e8c838

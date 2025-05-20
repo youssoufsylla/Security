@@ -1,0 +1,4 @@
+2025-04-09 13:15:24,221 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/docs - 200 - 0.00s
+2025-04-09 13:15:28,908 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/openapi.json - 200 - 0.44s
+2025-04-09 13:25:18,384 - rfc_callcenter_api - ERROR - HTTP POST http://127.0.0.1:8000/tablette/TB-2025-01/register_token - 400 - 1.36s
+2025-04-09 13:27:45,669 - rfc_callcenter_api - ERROR - HTTP POST http://127.0.0.1:8000/tablette/TB-2025-01/unregister_token - 400 - 0.77s

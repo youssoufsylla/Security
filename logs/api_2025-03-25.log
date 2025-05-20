@@ -1,0 +1,7 @@
+2025-03-25 15:30:45,706 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/ - 200 - None
+2025-03-25 15:30:46,410 - rfc_callcenter_api - ERROR - HTTP GET http://127.0.0.1:8000/favicon.ico - 404 - None
+2025-03-25 15:30:52,903 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/docs - 200 - None
+2025-03-25 15:30:55,301 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/openapi.json - 200 - 0.50s
+2025-03-25 15:57:51,121 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/openapi.json - 200 - 0.00s
+2025-03-25 15:58:02,744 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/docs - 200 - None
+2025-03-25 15:58:03,881 - rfc_callcenter_api - INFO - HTTP GET http://127.0.0.1:8000/openapi.json - 200 - 0.00s
