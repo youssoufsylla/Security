@@ -1,14 +1,16 @@
-name: SonarQube Analysis Windows
+name: Build and Security Report
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 jobs:
-  sonarqube:
-    runs-on: windows-latest  # Utilise le runner Windows
-    timeout-minutes: 30
+  sonarqube-analysis:
+    name: SonarQube Analysis
+    runs-on: windows-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -16,49 +18,54 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Download and Install SonarScanner
-        shell: powershell
+      - name: Install jq for Windows
         run: |
-          # Télécharger SonarScanner
-          $scannerUrl = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-windows.zip"
-          $downloadPath = "$env:RUNNER_TEMP\sonar-scanner.zip"
-          Invoke-WebRequest -Uri $scannerUrl -OutFile $downloadPath
-          
-          # Extraire et installer
-          Expand-Archive -Path $downloadPath -DestinationPath "$env:RUNNER_TEMP"
-          $scannerDir = Get-ChildItem -Path "$env:RUNNER_TEMP" -Directory -Filter "sonar-scanner-*" | Select-Object -First 1
-          $scannerPath = "$($scannerDir.FullName)\bin"
-          
-          # Ajouter au PATH
-          echo "$scannerPath" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          
-          # Vérifier l'installation
-          sonar-scanner.bat --version
+          curl -L -o jq.exe https://github.com/stedolan/jq/releases/download/jq-1.6/jq-win64.exe
+          echo "$env:GITHUB_WORKSPACE" >> $env:GITHUB_PATH
+          mv jq.exe "$env:GITHUB_WORKSPACE/jq.exe"
 
-      - name: Run SonarQube Analysis
-        shell: cmd
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          sonar-scanner.bat ^
-            -Dsonar.projectKey=rfc_callcenter_api_main ^
-            -Dsonar.projectName="My Windows Project" ^
-            -Dsonar.sources=. ^
-            -Dsonar.exclusions="**/*.min.js,**/*.min.css,**/node_modules/**" ^
-            -Dsonar.host.url=%SONAR_HOST_URL% ^
-            -Dsonar.login=%SONAR_TOKEN% ^
-            -Dsonar.sourceEncoding=UTF-8
-
-      - name: Upload Results
-        if: always()
-        uses: actions/upload-artifact@v4
+          SONAR_HOST_URL: https://7376-41-223-51-170.ngrok-free.app
         with:
-          name: sonarqube-results
-          path: .scannerwork/
+          args: >
+            -Dsonar.projectKey=rfc_callcenter_api_main
+            -Dsonar.projectName=RFC_CallCenter_API
+            -Dsonar.securityReport.path=./security-report.json
+            -Dsonar.exclusions=**/*.min.js,**/*.min.css,**/node_modules/**
+
+      - name: Generate Security Report
+        id: security-report
+        run: |
+          ./jq.exe -r '
+            .vulnerabilities[] | 
+            "| Fichier | Ligne | Règle | Sévérité |\n"+
+            "|---------|-------|-------|----------|\n"+
+            "| \(.component) | \(.line) | \(.rule.name) | \(.severity) |\n\n"+
+            "**Description**: \(.message)\n\n"
+          ' security-report.json > SECURITY_REPORT.md
+          
+          echo "report_path=SECURITY_REPORT.md" >> $GITHUB_OUTPUT
+          cat SECURITY_REPORT.md
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v4  # Version corrigée (v4 au lieu de v3)
+        with:
+          name: sonarqube-security-report
+          path: ${{ steps.security-report.outputs.report_path }}
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('SECURITY_REPORT.md', 'utf8');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔍 Rapport de Sécurité SonarQube\n${report}`
+            });
