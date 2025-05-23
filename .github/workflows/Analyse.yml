@@ -1,16 +1,14 @@
-name: Build and Security Report
+name: SonarQube Analysis
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
 
 jobs:
-  sonarqube-analysis:
-    name: SonarQube Analysis
+  sonarqube:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 45  # Augmentation significative du timeout
 
     steps:
       - name: Checkout code
@@ -18,54 +16,33 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install jq for Windows
-        run: |
-          curl -L -o jq.exe https://github.com/stedolan/jq/releases/download/jq-1.6/jq-win64.exe
-          echo "$env:GITHUB_WORKSPACE" >> $env:GITHUB_PATH
-          mv jq.exe "$env:GITHUB_WORKSPACE/jq.exe"
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://7376-41-223-51-170.ngrok-free.app
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configure SonarScanner
+        uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          scannerVersion: '7.1.0.4889'
           args: >
             -Dsonar.projectKey=rfc_callcenter_api_main
             -Dsonar.projectName=RFC_CallCenter_API
-            -Dsonar.securityReport.path=./security-report.json
             -Dsonar.exclusions=**/*.min.js,**/*.min.css,**/node_modules/**
+            -Dsonar.sourceEncoding=UTF-8
+            -Dsonar.scm.disabled=true
+            -Dsonar.scanner.forceRestart=true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: Generate Security Report
-        id: security-report
-        run: |
-          ./jq.exe -r '
-            .vulnerabilities[] | 
-            "| Fichier | Ligne | Règle | Sévérité |\n"+
-            "|---------|-------|-------|----------|\n"+
-            "| \(.component) | \(.line) | \(.rule.name) | \(.severity) |\n\n"+
-            "**Description**: \(.message)\n\n"
-          ' security-report.json > SECURITY_REPORT.md
-          
-          echo "report_path=SECURITY_REPORT.md" >> $GITHUB_OUTPUT
-          cat SECURITY_REPORT.md
-
-      - name: Upload Security Report
-        uses: actions/upload-artifact@v4  # Version corrigée (v4 au lieu de v3)
+      - name: Upload diagnostic files
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: sonarqube-security-report
-          path: ${{ steps.security-report.outputs.report_path }}
-
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('SECURITY_REPORT.md', 'utf8');
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## 🔍 Rapport de Sécurité SonarQube\n${report}`
-            });
+          name: sonarqube-diagnostics
+          path: |
+            .scannerwork/
+            ${{ runner.temp }}/sonar-scanner-*
+          retention-days: 1
