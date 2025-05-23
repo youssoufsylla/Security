@@ -51,7 +51,7 @@ jobs:
           cat SECURITY_REPORT.md
 
       - name: Upload Security Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # Version corrigée (v4 au lieu de v3)
         with:
           name: sonarqube-security-report
           path: ${{ steps.security-report.outputs.report_path }}
