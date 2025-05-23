@@ -1,4 +1,4 @@
-name: SonarQube Analysis
+name: SonarQube Analysis with Python
 
 on:
   push:
@@ -6,53 +6,62 @@ on:
   pull_request:
 
 jobs:
-  sonarqube:
-    runs-on: windows-latest
-    timeout-minutes: 30  # Augmentation du timeout
-    env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SONAR_HOST_URL: https://7376-41-223-51-170.ngrok-free.app
+  analyze:
+    runs-on: ubuntu-latest  # Recommandé pour une meilleure compatibilité Python
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          python-version: '3.10'
 
-      - name: Cache SonarScanner
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/sonar-scanner-cli
-          key: sonar-scanner-${{ runner.os }}-7.1.0.4889
-
-      - name: Install SonarScanner
-        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+      - name: Install dependencies
         run: |
-          mkdir -p "${{ runner.temp }}/sonar-scanner-cli"
-          curl -sSLo scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.1.0.4889-windows-x64.zip"
-          unzip -q scanner.zip -d "${{ runner.temp }}/sonar-scanner-cli"
-          mv "${{ runner.temp }}/sonar-scanner-cli/sonar-scanner-7.1.0.4889-windows-x64"/* "${{ runner.temp }}/sonar-scanner-cli"
+          python -m pip install requests pyyaml
 
-      - name: Run Fast SonarQube Scan
+      - name: Run SonarQube analysis (Python)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://7376-41-223-51-170.ngrok-free.app
         run: |
-          ${{ runner.temp }}/sonar-scanner-cli/bin/sonar-scanner.bat \
-            -Dsonar.projectKey=rfc_callcenter_api_main \
-            -Dsonar.projectName="RFC_CallCenter_API" \
-            -Dsonar.exclusions="**/*.min.js,**/*.min.css,**/node_modules/**" \
-            -Dsonar.sourceEncoding=UTF-8 \
-            -Dsonar.java.binaries=**/target/classes \
-            -Dsonar.scm.disabled=true  # Désactive l'analyse SCM pour gagner du temps
+          python -c "
+          import os
+          import requests
+          from urllib.parse import quote
 
-      - name: Upload Security Report
-        if: always()  # S'exécute même en cas d'échec
+          # Configuration
+          project_key = 'rfc_callcenter_api_main'
+          sources_path = '.'
+          exclusions = '**/*.min.js,**/*.min.css,**/node_modules/**'
+
+          # 1. Trigger SonarQube analysis
+          scan_cmd = f'sonar-scanner \
+            -Dsonar.projectKey={project_key} \
+            -Dsonar.sources={sources_path} \
+            -Dsonar.exclusions={exclusions} \
+            -Dsonar.host.url={os.environ["SONAR_HOST_URL"]} \
+            -Dsonar.login={os.environ["SONAR_TOKEN"]}'
+          os.system(scan_cmd)
+
+          # 2. Generate security report
+          api_url = f'{os.environ["SONAR_HOST_URL"]}/api/issues/search?componentKeys={project_key}&types=VULNERABILITY'
+          response = requests.get(api_url, auth=(os.environ["SONAR_TOKEN"], ''))
+          issues = response.json().get('issues', [])
+
+          with open('security_report.md', 'w') as f:
+              f.write('# SonarQube Security Report\n\n')
+              for issue in issues:
+                  f.write(f'## {issue["message"]}\n')
+                  f.write(f'- **File**: {issue["component"]}\n')
+                  f.write(f'- **Line**: {issue["line"]}\n')
+                  f.write(f'- **Severity**: {issue["severity"]}\n\n')
+          "
+
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
-          name: sonarqube-analysis-report
-          path: |
-            ${{ runner.temp }}/.scannerwork/*
-            ${{ runner.temp }}/security-report.json
+          name: sonarqube-python-report
+          path: security_report.md
