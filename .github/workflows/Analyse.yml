@@ -1,4 +1,4 @@
-name: SonarQube Analysis with Python
+name: SonarQube Analysis Windows
 
 on:
   push:
@@ -6,84 +6,59 @@ on:
   pull_request:
 
 jobs:
-  analyze:
-    runs-on: ubuntu-latest
+  sonarqube:
+    runs-on: windows-latest  # Utilise le runner Windows
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          python-version: '3.10'
+          fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Install Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download and Install SonarScanner
+        shell: powershell
         run: |
-          python -m pip install requests
+          # Télécharger SonarScanner
+          $scannerUrl = "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-windows.zip"
+          $downloadPath = "$env:RUNNER_TEMP\sonar-scanner.zip"
+          Invoke-WebRequest -Uri $scannerUrl -OutFile $downloadPath
+          
+          # Extraire et installer
+          Expand-Archive -Path $downloadPath -DestinationPath "$env:RUNNER_TEMP"
+          $scannerDir = Get-ChildItem -Path "$env:RUNNER_TEMP" -Directory -Filter "sonar-scanner-*" | Select-Object -First 1
+          $scannerPath = "$($scannerDir.FullName)\bin"
+          
+          # Ajouter au PATH
+          echo "$scannerPath" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          
+          # Vérifier l'installation
+          sonar-scanner.bat --version
 
-      - name: Run SonarQube analysis
+      - name: Run SonarQube Analysis
+        shell: cmd
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          python <<EOF
-          import os
-          import requests
-          from urllib.parse import quote
+          sonar-scanner.bat ^
+            -Dsonar.projectKey=rfc_callcenter_api_main ^
+            -Dsonar.projectName="My Windows Project" ^
+            -Dsonar.sources=. ^
+            -Dsonar.exclusions="**/*.min.js,**/*.min.css,**/node_modules/**" ^
+            -Dsonar.host.url=%SONAR_HOST_URL% ^
+            -Dsonar.login=%SONAR_TOKEN% ^
+            -Dsonar.sourceEncoding=UTF-8
 
-          # Configuration
-          project_key = "rfc_callcenter_api_main"
-          sources_path = "."
-          exclusions = "**/*.min.js,**/*.min.css,**/node_modules/**"
-
-          # Get environment variables
-          sonar_token = os.environ.get("SONAR_TOKEN")
-          sonar_url = os.environ.get("SONAR_HOST_URL")
-
-          if not sonar_token or not sonar_url:
-              raise ValueError("SONAR_TOKEN or SONAR_HOST_URL environment variables not set")
-
-          # 1. Run SonarScanner
-          scan_cmd = f'sonar-scanner \
-            -Dsonar.projectKey={project_key} \
-            -Dsonar.sources={sources_path} \
-            -Dsonar.exclusions={exclusions} \
-            -Dsonar.host.url={sonar_url} \
-            -Dsonar.login={sonar_token}'
-          
-          print(f"Executing: {scan_cmd}")
-          exit_code = os.system(scan_cmd)
-          
-          if exit_code != 0:
-              raise RuntimeError("SonarScanner failed with exit code {exit_code}")
-
-          # 2. Generate security report
-          api_url = f"{sonar_url}/api/issues/search?componentKeys={project_key}&types=VULNERABILITY"
-          headers = {"Authorization": f"Bearer {sonar_token}"}
-          
-          try:
-              response = requests.get(api_url, headers=headers)
-              response.raise_for_status()
-              issues = response.json().get('issues', [])
-              
-              with open('security_report.md', 'w') as f:
-                  f.write('# SonarQube Security Report\n\n')
-                  f.write(f'Project: {project_key}\n\n')
-                  f.write('| Severity | File | Line | Message |\n')
-                  f.write('|----------|------|------|---------|\n')
-                  
-                  for issue in issues:
-                      f.write(f"| {issue['severity']} | {issue['component']} | {issue.get('line', 'N/A')} | {issue['message']} |\n")
-              
-              print("Report generated successfully")
-          except Exception as e:
-              print(f"Error generating report: {str(e)}")
-              exit(1)
-          EOF
-
-      - name: Upload report
+      - name: Upload Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sonarqube-security-report
-          path: security_report.md
+          name: sonarqube-results
+          path: .scannerwork/
