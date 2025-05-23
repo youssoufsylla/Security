@@ -35,7 +35,7 @@ jobs:
             -Dsonar.scanner.forceRestart=true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_HOST_URL: https://68d2-41-223-51-170.ngrok-free.app
 
       - name: Upload diagnostic files
         if: always()
